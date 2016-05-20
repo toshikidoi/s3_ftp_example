@@ -48,7 +48,19 @@ module S3FTP
 
       item = Happening::S3::Bucket.new(@aws_bucket, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret, :prefix => prefix, :delimiter => "/")
       item.get do |response|
-        yield parse_bucket_list(response.response)
+        case path
+        when '/'
+          yield parse_bucket_list(response.response)
+        when "/#{@user}"
+          file_condition = Proc.new{|name| name == "#{@user}/#{PUBLISH_DATA_CSV_PATH}"}
+          dir_condition = Proc.new{|name| name == "#{@user}/#{IMAGES_DIR_NAME}/"}
+          yield parse_bucket_list(response.response, file_condition, dir_condition)
+        when "/#{@user}/#{IMAGES_DIR_NAME}"
+          # TODO: 本来は画像リストcsvから画像ファイル一覧を取得し返す
+          yield [file_item('aiueo.jpg', 0), file_item('hoge.jpg', 0)]
+        else
+          yield []
+        end
       end
     end
 
@@ -171,21 +183,22 @@ module S3FTP
       }
     end
 
-    def parse_bucket_list(xml)
+    def parse_bucket_list(xml, file_condition_proc = Proc.new{ true }, dir_condition_proc = Proc.new{ true })
       doc = Nokogiri::XML(xml)
       doc.remove_namespaces!
       prefix = doc.xpath('/ListBucketResult/Prefix').first.content
       files = doc.xpath('//Contents').select { |node|
         name  = node.xpath('./Key').first.content
         bytes = node.xpath('./Size').first.content.to_i
-        name != prefix && bytes > 0
+        name != prefix && bytes > 0 && file_condition_proc.call(name)
       }.map { |node|
         name  = node.xpath('./Key').first.content
         bytes = node.xpath('./Size').first.content
         file_item(name[prefix.size, 1024], bytes)
       }
       dirs = doc.xpath('//CommonPrefixes').select { |node|
-        node.xpath('./Prefix').first.content != prefix + "/"
+        name = node.xpath('./Prefix').first.content
+        name != prefix + "/" && dir_condition_proc.call(name)
       }.map { |node|
         name  = node.xpath('./Prefix').first.content
         dir_item(name[prefix.size, 1024].tr("/",""))
