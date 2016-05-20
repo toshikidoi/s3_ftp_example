@@ -34,7 +34,14 @@ module S3FTP
     end
 
     def dir_contents(path, &block)
+      puts "********************************** dir_contents path: #{path}"
+      unless path.match(/(^\/$)|(^\/#{@user}\/?$)|(^\/#{@user}\/#{IMAGES_DIR_NAME}\/?$)/)
+        puts '********************************** dir_contents path: false'
+        yield []
+        return
+      end
       prefix = scoped_path_with_trailing_slash(path)
+      puts "********************************** dir_contents prefix: #{prefix}"
 
       on_error   = Proc.new {|response| yield false }
       on_success = Proc.new {|response| yield response.response_header["CONTENT_LENGTH"].to_i }
