@@ -1,4 +1,5 @@
 ## Environment normalisation:
 /.bundle
+.idea/
 
 config.rb
