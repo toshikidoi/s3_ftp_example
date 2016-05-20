@@ -96,69 +96,23 @@ module S3FTP
     end
 
     def put_file(path, tmp_path, &block)
-      key = scoped_path(path)
-
-      bytes      = File.size(tmp_path)
-      on_error   = Proc.new {|response| yield false }
-      on_success = Proc.new {|response| yield bytes  }
-
-      item = Happening::S3::Item.new(@aws_bucket, key, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret)
-      item.put(File.binread(tmp_path), :retry_count => 0, :on_success => on_success, :on_error => on_error)
+      yield false
     end
 
     def delete_file(path, &block)
-      key = scoped_path(path)
-
-      on_error   = Proc.new {|response| yield false }
-      on_success = Proc.new {|response| yield true  }
-
-      item = Happening::S3::Item.new(@aws_bucket, key, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret)
-      item.delete(:retry_count => 1, :on_success => on_success, :on_error => on_error)
+      yield false
     end
 
     def delete_dir(path, &block)
-      prefix = scoped_path(path)
-
-      on_error   = Proc.new {|response| yield false }
-
-      item = Happening::S3::Bucket.new(@aws_bucket, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret, :prefix => prefix)
-      item.get(:on_error => on_error) do |response|
-        keys = bucket_list_to_full_keys(response.response)
-        delete_object = Proc.new { |key, iter|
-          item = Happening::S3::Item.new(@aws_bucket, key, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret)
-          item.delete(:retry_count => 1, :on_error => on_error) do |response|
-            iter.next
-          end
-        }
-        on_complete = Proc.new { yield true }
-
-        EM::Iterator.new(keys, 5).each(delete_object, on_complete)
-      end
+      yield false
     end
 
     def rename(from, to, &block)
-      source_key = scoped_path(from)
-      source_obj = @aws_bucket + "/" + source_key
-      dest_key   = scoped_path(to)
-
-      on_error   = Proc.new {|response| yield false }
-      on_success = Proc.new {|response| yield true  }
-
-      item = Happening::S3::Item.new(@aws_bucket, dest_key, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret)
-      item.put(nil, :retry_count => 1, :on_error => on_error, :headers => {"x-amz-copy-source" => source_obj}) do |response|
-        item = Happening::S3::Item.new(@aws_bucket, source_key, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret)
-        item.delete(:retry_count => 1, :on_success => on_success, :on_error => on_error)
-      end
+      yield false
     end
 
     def make_dir(path, &block)
-      key = scoped_path(path) + "/.dir"
-
-      on_error   = Proc.new {|response| yield false }
-      on_success = Proc.new {|response| yield true  }
-
-      item = Happening::S3::Item.new(@aws_bucket, key, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret)
-      item.put("", :retry_count => 0, :on_success => on_success, :on_error => on_error)
+      yield false
     end
 
     private
@@ -203,14 +157,6 @@ module S3FTP
       else
         File.join("/", @user, path)[1,1024]
       end
-    end
-
-    def bucket_list_to_full_keys(xml)
-      doc = Nokogiri::XML(xml)
-      doc.remove_namespaces!
-      doc.xpath('//Contents').map { |node|
-        node.xpath('./Key').first.content
-      }
     end
 
     def contains_directory?(xml, path)
