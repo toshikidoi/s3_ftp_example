@@ -9,12 +9,23 @@ module S3FTP
     PASS  = 1
     ADMIN = 2
 
+    PUBLISH_DATA_CSV_PATH = 'publish_data.csv'
+    PUBLISH_IMAGES_CSV_PATH = 'publish_images.csv'
+    IMAGES_DIR_NAME = 'image'
+
     def initialize(key, secret, bucket)
       @aws_key, @aws_secret, @aws_bucket = key, secret, bucket
     end
 
     def change_dir(path, &block)
+      puts "********************************** change_dir path: #{path}"
+      unless path.match(/(^\/$)|(^\/#{@user}\/?$)|(^\/#{@user}\/#{IMAGES_DIR_NAME}\/?$)/)
+        puts '********************************** change_dir path: false'
+        yield false
+        return
+      end
       prefix = scoped_path(path)
+      puts "********************************** change_dir prefix: #{prefix}"
 
       item = Happening::S3::Bucket.new(@aws_bucket, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret, :prefix => prefix, :delimiter => "/")
       item.get do |response|
