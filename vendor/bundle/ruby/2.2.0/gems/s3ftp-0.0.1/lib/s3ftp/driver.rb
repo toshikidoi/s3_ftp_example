@@ -43,8 +43,15 @@ module S3FTP
       prefix = scoped_path_with_trailing_slash(path)
       puts "********************************** dir_contents prefix: #{prefix}"
 
-      on_error   = Proc.new {|response| yield false }
-      on_success = Proc.new {|response| yield response.response_header["CONTENT_LENGTH"].to_i }
+      # imageディレクトリへのアクセスなら画像リストcsvから画像ファイル一覧を取得し返す
+      if path == "/#{@user}/#{IMAGES_DIR_NAME}"
+        download_publish_data_csv do |publish_data_list|
+          list = publish_data_list.split("\n").map{|data| data.split(',').first}
+          puts "result is #{list}"
+          yield list.map{|image_path| file_item(image_path, 0)}
+        end
+        return
+      end
 
       item = Happening::S3::Bucket.new(@aws_bucket, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret, :prefix => prefix, :delimiter => "/")
       item.get do |response|
@@ -55,9 +62,6 @@ module S3FTP
           file_condition = Proc.new{|name| name == "#{@user}/#{PUBLISH_DATA_CSV_PATH}"}
           dir_condition = Proc.new{|name| name == "#{@user}/#{IMAGES_DIR_NAME}/"}
           yield parse_bucket_list(response.response, file_condition, dir_condition)
-        when "/#{@user}/#{IMAGES_DIR_NAME}"
-          # TODO: 本来は画像リストcsvから画像ファイル一覧を取得し返す
-          yield [file_item('aiueo.jpg', 0), file_item('hoge.jpg', 0)]
         else
           yield []
         end
@@ -85,6 +89,8 @@ module S3FTP
         return
       end
       key = scoped_path(path)
+
+      # TODO: imageディレクトリにアクセスが来た場合はマッピングしてからitem.headする必要がある
 
       on_error   = Proc.new {|response| yield false }
       on_success = Proc.new {|response| yield response.response_header["CONTENT_LENGTH"].to_i }
@@ -222,6 +228,17 @@ module S3FTP
 
     def file_item(name, bytes)
       EM::FTPD::DirectoryItem.new(:name => name, :directory => false, :size => bytes)
+    end
+
+    def download_publish_data_csv
+      on_error = Proc.new { |response|
+        yield false
+      }
+      on_success = Proc.new { |response|
+        yield response.response
+      }
+      item = Happening::S3::Item.new(@aws_bucket, "#{@user}/#{PUBLISH_DATA_CSV_PATH}", :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret)
+      item.get(:on_success => on_success, :on_error => on_error)
     end
 
   end
