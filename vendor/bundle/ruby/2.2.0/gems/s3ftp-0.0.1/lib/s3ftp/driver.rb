@@ -78,6 +78,12 @@ module S3FTP
     end
 
     def bytes(path, &block)
+      puts "********************************** bytes path: #{path}"
+      unless path.match(/(^\/#{@user}\/#{PUBLISH_DATA_CSV_PATH}$)|(^\/#{@user}\/#{IMAGES_DIR_NAME}\/[^\/]+$)/)
+        puts '********************************** bytes path: false'
+        yield false
+        return
+      end
       key = scoped_path(path)
 
       on_error   = Proc.new {|response| yield false }
