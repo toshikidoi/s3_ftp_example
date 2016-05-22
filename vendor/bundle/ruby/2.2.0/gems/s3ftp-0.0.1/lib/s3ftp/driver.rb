@@ -237,7 +237,7 @@ module S3FTP
       on_success = Proc.new { |response|
         yield response.response
       }
-      item = Happening::S3::Item.new(@aws_bucket, "#{@user}/#{PUBLISH_DATA_CSV_PATH}", :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret)
+      item = Happening::S3::Item.new(@aws_bucket, "#{@user}/#{PUBLISH_IMAGES_CSV_PATH}", :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret)
       item.get(:on_success => on_success, :on_error => on_error)
     end
 
