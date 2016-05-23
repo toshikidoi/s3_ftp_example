@@ -18,14 +18,11 @@ module S3FTP
     end
 
     def change_dir(path, &block)
-      puts "********************************** change_dir path: #{path}"
       unless path.match(/(^\/$)|(^\/#{@user}\/?$)|(^\/#{@user}\/#{IMAGES_DIR_NAME}\/?$)/)
-        puts '********************************** change_dir path: false'
         yield false
         return
       end
       prefix = scoped_path(path)
-      puts "********************************** change_dir prefix: #{prefix}"
 
       item = Happening::S3::Bucket.new(@aws_bucket, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret, :prefix => prefix, :delimiter => "/")
       item.get do |response|
@@ -34,20 +31,16 @@ module S3FTP
     end
 
     def dir_contents(path, &block)
-      puts "********************************** dir_contents path: #{path}"
       unless path.match(/(^\/$)|(^\/#{@user}\/?$)|(^\/#{@user}\/#{IMAGES_DIR_NAME}\/?$)/)
-        puts '********************************** dir_contents path: false'
         yield []
         return
       end
       prefix = scoped_path_with_trailing_slash(path)
-      puts "********************************** dir_contents prefix: #{prefix}"
 
       # imageディレクトリへのアクセスなら画像リストcsvから画像ファイル一覧を取得し返す
       if path == "/#{@user}/#{IMAGES_DIR_NAME}"
         download_publish_data_csv do |publish_data_list|
           list = publish_data_list.split("\n").map{|data| data.split(',').first}
-          puts "result is #{list}"
           yield list.map{|image_path| file_item(image_path, 0)}
         end
         return
@@ -82,9 +75,7 @@ module S3FTP
     end
 
     def bytes(path, &block)
-      puts "********************************** bytes path: #{path}"
       unless path.match(/(^\/#{@user}\/#{PUBLISH_DATA_CSV_PATH}$)|(^\/#{@user}\/#{IMAGES_DIR_NAME}\/[^\/]+$)/)
-        puts '********************************** bytes path: false'
         yield false
         return
       end
@@ -92,12 +83,9 @@ module S3FTP
 
       # imageディレクトリへのアクセスなら画像リストcsvから画像ファイルのバケットとキーを取得し返す
       if path.start_with?("/#{@user}/#{IMAGES_DIR_NAME}/")
-        puts '********************************** bytes: image_dir!!!!!'
         download_publish_data_csv do |publish_data_list|
           list = publish_data_list.split("\n").map{|data| data.split(',')}
           bucket, key = list.find{|data| data.first == path.split('/')[3]}[1..2]
-          puts "bucket is #{bucket}"
-          puts "key is #{key}"
           get_bytes(bucket, key, &block)
         end
         return
@@ -106,24 +94,17 @@ module S3FTP
     end
 
     def get_file(path, &block)
-      puts "********************************** get_file path: #{path}"
-      puts "********************************** get_file path2: #{path.split('/')}"
       unless path.match(/(^\/#{@user}\/#{PUBLISH_DATA_CSV_PATH}$)|(^\/#{@user}\/#{IMAGES_DIR_NAME}\/[^\/]+$)/)
-        puts '********************************** get_file path: false'
         yield false
         return
       end
       key = scoped_path(path)
-      puts "********************************** get_file key: #{key}"
 
       # imageディレクトリへのアクセスなら画像リストcsvから画像ファイルのバケットとキーを取得し返す
       if path.start_with?("/#{@user}/#{IMAGES_DIR_NAME}/")
-        puts '********************************** get_file: image_dir!!!!!'
         download_publish_data_csv do |publish_data_list|
           list = publish_data_list.split("\n").map{|data| data.split(',')}
           bucket, key = list.find{|data| data.first == path.split('/')[3]}[1..2]
-          puts "bucket is #{bucket}"
-          puts "key is #{key}"
           download_file(bucket, key, &block)
         end
         return
