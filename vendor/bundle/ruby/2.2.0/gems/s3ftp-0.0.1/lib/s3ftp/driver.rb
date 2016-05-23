@@ -100,7 +100,40 @@ module S3FTP
     end
 
     def get_file(path, &block)
+      puts "********************************** get_file path: #{path}"
+      puts "********************************** get_file path2: #{path.split('/')}"
+      unless path.match(/(^\/#{@user}\/#{PUBLISH_DATA_CSV_PATH}$)|(^\/#{@user}\/#{IMAGES_DIR_NAME}\/[^\/]+$)/)
+        puts '********************************** get_file path: false'
+        yield false
+        return
+      end
       key = scoped_path(path)
+      puts "********************************** get_file key: #{key}"
+
+      # imageディレクトリへのアクセスなら画像リストcsvから画像ファイルのバケットとキーを取得し返す
+      if path.start_with?("/#{@user}/#{IMAGES_DIR_NAME}/")
+        puts '********************************** get_file: image_dir!!!!!'
+        download_publish_data_csv do |publish_data_list|
+          list = publish_data_list.split("\n").map{|data| data.split(',')}
+          bucket, key = list.find{|data| data.first == path.split('/')[3]}[1..2]
+          puts "bucket is #{bucket}"
+          puts "key is #{key}"
+
+          tmpfile = Tempfile.new("s3ftp")
+          on_error   = Proc.new {|response| yield false }
+          on_success = Proc.new {|response|
+            tmpfile.flush
+            tmpfile.seek(0)
+            yield tmpfile
+          }
+
+          item = Happening::S3::Item.new(bucket, key, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret)
+          item.get(:retry_count => 1, :on_success => on_success, :on_error => on_error).stream do |chunk|
+            tmpfile.write chunk
+          end
+        end
+        return
+      end
 
       # open a tempfile to store the file as it's downloaded from S3.
       # em-ftpd will close it for us
