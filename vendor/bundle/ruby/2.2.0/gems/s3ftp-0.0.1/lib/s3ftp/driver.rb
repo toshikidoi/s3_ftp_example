@@ -90,13 +90,19 @@ module S3FTP
       end
       key = scoped_path(path)
 
-      # TODO: imageディレクトリにアクセスが来た場合はマッピングしてからitem.headする必要がある
-
-      on_error   = Proc.new {|response| yield false }
-      on_success = Proc.new {|response| yield response.response_header["CONTENT_LENGTH"].to_i }
-
-      item = Happening::S3::Item.new(@aws_bucket, key, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret)
-      item.head(:retry_count => 0, :on_success => on_success, :on_error => on_error)
+      # imageディレクトリへのアクセスなら画像リストcsvから画像ファイルのバケットとキーを取得し返す
+      if path.start_with?("/#{@user}/#{IMAGES_DIR_NAME}/")
+        puts '********************************** bytes: image_dir!!!!!'
+        download_publish_data_csv do |publish_data_list|
+          list = publish_data_list.split("\n").map{|data| data.split(',')}
+          bucket, key = list.find{|data| data.first == path.split('/')[3]}[1..2]
+          puts "bucket is #{bucket}"
+          puts "key is #{key}"
+          get_bytes(bucket, key, &block)
+        end
+        return
+      end
+      get_bytes(@aws_bucket, key, &block)
     end
 
     def get_file(path, &block)
@@ -245,6 +251,14 @@ module S3FTP
       }
       item = Happening::S3::Item.new(@aws_bucket, "#{@user}/#{PUBLISH_IMAGES_CSV_PATH}", :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret)
       item.get(:on_success => on_success, :on_error => on_error)
+    end
+
+    def get_bytes(bucket, key, &block)
+      on_error   = Proc.new {|response| yield false }
+      on_success = Proc.new {|response| yield response.response_header["CONTENT_LENGTH"].to_i }
+
+      item = Happening::S3::Item.new(bucket, key, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret)
+      item.head(:retry_count => 0, :on_success => on_success, :on_error => on_error)
     end
 
     def download_file(bucket, key, &block)
