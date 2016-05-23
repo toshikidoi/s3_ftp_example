@@ -118,38 +118,11 @@ module S3FTP
           bucket, key = list.find{|data| data.first == path.split('/')[3]}[1..2]
           puts "bucket is #{bucket}"
           puts "key is #{key}"
-
-          tmpfile = Tempfile.new("s3ftp")
-          on_error   = Proc.new {|response| yield false }
-          on_success = Proc.new {|response|
-            tmpfile.flush
-            tmpfile.seek(0)
-            yield tmpfile
-          }
-
-          item = Happening::S3::Item.new(bucket, key, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret)
-          item.get(:retry_count => 1, :on_success => on_success, :on_error => on_error).stream do |chunk|
-            tmpfile.write chunk
-          end
+          download_file(bucket, key, &block)
         end
         return
       end
-
-      # open a tempfile to store the file as it's downloaded from S3.
-      # em-ftpd will close it for us
-      tmpfile = Tempfile.new("s3ftp")
-
-      on_error   = Proc.new {|response| yield false }
-      on_success = Proc.new {|response|
-        tmpfile.flush
-        tmpfile.seek(0)
-        yield tmpfile
-      }
-
-      item = Happening::S3::Item.new(@aws_bucket, key, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret)
-      item.get(:retry_count => 1, :on_success => on_success, :on_error => on_error).stream do |chunk|
-        tmpfile.write chunk
-      end
+      download_file(@aws_bucket, key, &block)
     end
 
     def put_file(path, tmp_path, &block)
@@ -272,6 +245,24 @@ module S3FTP
       }
       item = Happening::S3::Item.new(@aws_bucket, "#{@user}/#{PUBLISH_IMAGES_CSV_PATH}", :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret)
       item.get(:on_success => on_success, :on_error => on_error)
+    end
+
+    def download_file(bucket, key, &block)
+      # open a tempfile to store the file as it's downloaded from S3.
+      # em-ftpd will close it for us
+      tmpfile = Tempfile.new("s3ftp")
+
+      on_error   = Proc.new {|response| yield false }
+      on_success = Proc.new {|response|
+        tmpfile.flush
+        tmpfile.seek(0)
+        yield tmpfile
+      }
+
+      item = Happening::S3::Item.new(bucket, key, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret)
+      item.get(:retry_count => 1, :on_success => on_success, :on_error => on_error).stream do |chunk|
+        tmpfile.write chunk
+      end
     end
 
   end
