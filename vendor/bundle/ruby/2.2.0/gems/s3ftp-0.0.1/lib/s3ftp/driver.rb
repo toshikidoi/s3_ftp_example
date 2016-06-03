@@ -34,14 +34,17 @@ module S3FTP
     end
 
     def dir_contents(path, &block)
-      unless path.match(/(^\/$)|(^\/#{@user}\/?$)|(^\/#{@user}\/#{IMAGES_DIR_NAME}\/?$)/)
+      puts "********************************** dir_contents path: #{path}"
+      prefix = scoped_path(path)
+      puts "********************************** dir_contents prefix: #{prefix}"
+      unless prefix.match(/(^#{@user}\/?$)|(^#{@user}\/#{IMAGES_DIR_NAME}\/?$)/)
+        puts '********************************** dir_contents path: false'
         yield []
         return
       end
-      prefix = scoped_path_with_trailing_slash(path)
 
       # imageディレクトリへのアクセスなら画像リストcsvから画像ファイル一覧を取得し返す
-      if path == "/#{@user}/#{IMAGES_DIR_NAME}"
+      if prefix == "#{@user}/#{IMAGES_DIR_NAME}"
         download_publish_data_csv do |publish_data_list|
           list = publish_data_list.split("\n").map{|data| data.split(',').first}
           yield list.map{|image_path| file_item(image_path, 0)}
@@ -51,10 +54,8 @@ module S3FTP
 
       item = Happening::S3::Bucket.new(@aws_bucket, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret, :prefix => prefix, :delimiter => "/")
       item.get do |response|
-        case path
-        when '/'
-          yield parse_bucket_list(response.response)
-        when "/#{@user}"
+        case prefix
+        when "#{@user}/"
           file_condition = Proc.new{|name| name == "#{@user}/#{PUBLISH_DATA_CSV_PATH}"}
           dir_condition = Proc.new{|name| name == "#{@user}/#{IMAGES_DIR_NAME}/"}
           yield parse_bucket_list(response.response, file_condition, dir_condition)
