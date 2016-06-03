@@ -18,11 +18,14 @@ module S3FTP
     end
 
     def change_dir(path, &block)
-      unless path.match(/(^\/$)|(^\/#{@user}\/?$)|(^\/#{@user}\/#{IMAGES_DIR_NAME}\/?$)/)
+      puts "********************************** change_dir path: #{path}"
+      prefix = scoped_path(path)
+      puts "********************************** change_dir prefix: #{prefix}"
+      unless prefix.match(/(^#{@user}\/?$)|(^#{@user}\/#{IMAGES_DIR_NAME}\/?$)/)
+        puts '********************************** change_dir path: false'
         yield false
         return
       end
-      prefix = scoped_path(path)
 
       item = Happening::S3::Bucket.new(@aws_bucket, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret, :prefix => prefix, :delimiter => "/")
       item.get do |response|
