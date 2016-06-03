@@ -18,11 +18,8 @@ module S3FTP
     end
 
     def change_dir(path, &block)
-      puts "********************************** change_dir path: #{path}"
       prefix = scoped_path(path)
-      puts "********************************** change_dir prefix: #{prefix}"
       unless prefix.match(/(^#{@user}\/?$)|(^#{@user}\/#{IMAGES_DIR_NAME}\/?$)/)
-        puts '********************************** change_dir path: false'
         yield false
         return
       end
@@ -34,11 +31,8 @@ module S3FTP
     end
 
     def dir_contents(path, &block)
-      puts "********************************** dir_contents path: #{path}"
       prefix = scoped_path(path)
-      puts "********************************** dir_contents prefix: #{prefix}"
       unless prefix.match(/(^#{@user}\/?$)|(^#{@user}\/#{IMAGES_DIR_NAME}\/?$)/)
-        puts '********************************** dir_contents path: false'
         yield []
         return
       end
@@ -79,11 +73,8 @@ module S3FTP
     end
 
     def bytes(path, &block)
-      puts "********************************** bytes path: #{path}"
       key = scoped_path(path)
-      puts "********************************** bytes key: #{key}"
       unless key.match(/(^#{@user}\/#{PUBLISH_DATA_CSV_PATH}$)|(^#{@user}\/#{IMAGES_DIR_NAME}\/[^\/]+$)/)
-        puts '********************************** bytes path: false'
         yield false
         return
       end
@@ -101,11 +92,8 @@ module S3FTP
     end
 
     def get_file(path, &block)
-      puts "********************************** get_file path: #{path}"
       key = scoped_path(path)
-      puts "********************************** get_file key: #{key}"
       unless key.match(/(^#{@user}\/#{PUBLISH_DATA_CSV_PATH}$)|(^#{@user}\/#{IMAGES_DIR_NAME}\/[^\/]+$)/)
-        puts '********************************** get_file path: false'
         yield false
         return
       end
