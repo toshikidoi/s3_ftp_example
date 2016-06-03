@@ -79,17 +79,20 @@ module S3FTP
     end
 
     def bytes(path, &block)
-      unless path.match(/(^\/#{@user}\/#{PUBLISH_DATA_CSV_PATH}$)|(^\/#{@user}\/#{IMAGES_DIR_NAME}\/[^\/]+$)/)
+      puts "********************************** bytes path: #{path}"
+      key = scoped_path(path)
+      puts "********************************** bytes prefix: #{key}"
+      unless key.match(/(^#{@user}\/#{PUBLISH_DATA_CSV_PATH}$)|(^#{@user}\/#{IMAGES_DIR_NAME}\/[^\/]+$)/)
+        puts '********************************** bytes path: false'
         yield false
         return
       end
-      key = scoped_path(path)
 
       # imageディレクトリへのアクセスなら画像リストcsvから画像ファイルのバケットとキーを取得し返す
-      if path.start_with?("/#{@user}/#{IMAGES_DIR_NAME}/")
+      if key.start_with?("#{@user}/#{IMAGES_DIR_NAME}/")
         download_publish_data_csv do |publish_data_list|
           list = publish_data_list.split("\n").map{|data| data.split(',')}
-          bucket, key = list.find{|data| data.first == path.split('/')[3]}[1..2]
+          bucket, key = list.find{|data| data.first == key.split('/')[2]}[1..2]
           get_bytes(bucket, key, &block)
         end
         return
