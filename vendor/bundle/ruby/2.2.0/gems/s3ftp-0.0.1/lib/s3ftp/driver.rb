@@ -18,8 +18,11 @@ module S3FTP
     end
 
     def change_dir(path, &block)
+      puts "********************************** change_dir path: #{path}"
       prefix = scoped_path(path)
+      puts "********************************** change_dir prefix: #{prefix}"
       unless prefix.match(/(^#{@user}\/?$)|(^#{@user}\/[^\/]+\/?$)|(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/?$)/)
+        puts '********************************** change_dir: false'
         yield false
         return
       end
@@ -31,18 +34,12 @@ module S3FTP
     end
 
     def dir_contents(path, &block)
+      puts "********************************** dir_contents path: #{path}"
       prefix = scoped_path_with_trailing_slash(path)
+      puts "********************************** dir_contents prefix: #{prefix}"
       unless prefix.match(/(^#{@user}\/?$)|(^#{@user}\/[^\/]+\/?$)|(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/?$)/)
+        puts '********************************** dir_contents: false'
         yield []
-        return
-      end
-
-      # imageディレクトリへのアクセスなら画像リストcsvから画像ファイル一覧を取得し返す
-      if prefix.match(/(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/?$)/)
-        download_publish_data_csv(prefix) do |publish_data_list|
-          list = publish_data_list.split("\n").map{|data| data.split(',').first}
-          yield list.map{|image_path| file_item(image_path, 0)}
-        end
         return
       end
 
@@ -56,6 +53,18 @@ module S3FTP
           file_condition = Proc.new{|name| name.match(/(^#{@user}\/[^\/]+\/#{PUBLISH_DATA_CSV_PATH}$)/)}
           dir_condition = Proc.new{|name| name.match(/(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/$)/)}
           yield parse_bucket_list(response.response, file_condition, dir_condition)
+        when /(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/?$)/
+          # imageディレクトリへのアクセスなら画像リストcsvから画像ファイル一覧を取得し返す
+          list = parse_bucket_list(response.response, Proc.new{ true }, Proc.new{ true })
+          download_publish_data_csv(prefix) do |publish_data_list|
+            data_list = publish_data_list.split("\n")
+            list = list.map do |item|
+              data = data_list.find{|data| data.split(',')[2] == "#{prefix}#{item.name}"}
+              item.name = data ? data.split(',')[0] : nil
+              item
+            end.select(&:name)
+            yield list
+          end
         else
           yield []
         end
@@ -76,8 +85,11 @@ module S3FTP
     end
 
     def bytes(path, &block)
+      puts "********************************** bytes path: #{path}"
       key = scoped_path(path)
+      puts "********************************** bytes prefix: #{key}"
       unless key.match(/(^#{@user}\/[^\/]+\/#{PUBLISH_DATA_CSV_PATH}$)|(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/[^\/]+$)/)
+        puts '********************************** bytes: false'
         yield false
         return
       end
@@ -95,8 +107,11 @@ module S3FTP
     end
 
     def get_file(path, &block)
+      puts "********************************** get_file path: #{path}"
       key = scoped_path(path)
+      puts "********************************** get_file prefix: #{key}"
       unless key.match(/(^#{@user}\/[^\/]+\/#{PUBLISH_DATA_CSV_PATH}$)|(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/[^\/]+$)/)
+        puts '********************************** get_file: false'
         yield false
         return
       end
