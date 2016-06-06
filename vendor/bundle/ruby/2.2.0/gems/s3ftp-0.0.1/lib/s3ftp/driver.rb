@@ -21,7 +21,8 @@ module S3FTP
       puts "********************************** change_dir path: #{path}"
       prefix = scoped_path(path)
       puts "********************************** change_dir prefix: #{prefix}"
-      unless prefix.match(/(^#{@user}\/?$)|(^#{@user}\/#{IMAGES_DIR_NAME}\/?$)/)
+      unless prefix.match(/(^#{@user}\/?$)|(^#{@user}\/[^\/]+\/?$)|(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/?$)/)
+        puts '********************************** change_dir path: false'
         yield false
         return
       end
