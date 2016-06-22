@@ -52,7 +52,11 @@ module EM::FTPD
       send_response "150 Opening ASCII mode data connection for file list"
 
       @driver.dir_contents(build_path(param)) do |files|
-        send_outofband_data(files.map{|file| "#{param}/#{file.name}"})
+        if param == '*'
+          send_outofband_data(files.map{|file| file.name})
+        else
+          send_outofband_data(files.map{|file| "#{param}/#{file.name}"})
+        end
       end
     end
 

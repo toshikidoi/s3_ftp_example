@@ -37,10 +37,14 @@ module S3FTP
       puts "********************************** dir_contents path: #{path}"
       prefix = scoped_path_with_trailing_slash(path)
       puts "********************************** dir_contents prefix: #{prefix}"
-      unless prefix.match(/(^#{@user}\/?$)|(^#{@user}\/[^\/]+\/?$)|(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/?$)/)
+      unless prefix.match(/(^#{@user}\/?$)|(^#{@user}\/[^\/]+\/?$)|(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/?$)|(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/\*\/$)/)
         puts '********************************** dir_contents: false'
         yield []
         return
+      end
+
+      if prefix.match(/(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/\*\/$)/)
+        prefix = prefix.match(/(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/)/)[0]
       end
 
       item = Happening::S3::Bucket.new(@aws_bucket, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret, :prefix => prefix, :delimiter => "/")
