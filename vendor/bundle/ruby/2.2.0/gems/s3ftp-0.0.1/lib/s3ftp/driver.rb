@@ -155,8 +155,7 @@ module S3FTP
     private
 
     def write_log(method_name, result)
-      puts "#{method_name}: #{result}, user: #{@user}"
-      # Happening::Log.debug "#{method_name}: #{result}, user: #{@user}"
+      Log.info("#{method_name}: #{result}, user: #{@user}")
     end
 
     def extract_users(passwd)
@@ -301,5 +300,56 @@ module S3FTP
       end
     end
 
+  end
+
+  class Log
+    LOG_FILE = nil
+    @@logger = nil
+
+    def self.logger=(log)
+      @@logger = log
+    end
+
+    def self.logger
+      @@logger || create_logger
+    end
+
+    def self.create_logger
+      config_data = File.read('config.rb')
+      class_eval(config_data)
+      log_file = LOG_FILE || STDOUT
+      @@logger = Logger.new(log_file)
+      @@logger.level = Logger::INFO
+      @@logger
+    end
+
+    def self.level=(lev)
+      logger.level = lev
+    end
+
+    def self.level
+      logger.level
+    end
+
+    def self.debug(msg)
+      logger.debug("S3FTP: #{msg}")
+    end
+
+    def self.info(msg)
+      logger.info("S3FTP: #{msg}")
+    end
+
+    def self.warn(msg)
+      logger.warn("S3FTP: #{msg}")
+    end
+
+    def self.error(msg)
+      logger.error("S3FTP: #{msg}")
+    end
+
+    # 以下、元々あるconfigを使い回すために仕方なく(class_eval用)
+    def self.driver(*_args); return end
+
+    def self.driver_args(*_args); return end
   end
 end
