@@ -66,7 +66,6 @@ module EM::FTPD
 
     # return the size of a file in bytes
     def cmd_size(param)
-      puts "¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥ cmd_size param: #{param}"
       send_unauthorised and return unless logged_in?
       send_param_required and return if param.nil?
 

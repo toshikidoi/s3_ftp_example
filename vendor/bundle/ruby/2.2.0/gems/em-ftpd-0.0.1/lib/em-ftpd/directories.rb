@@ -47,7 +47,6 @@ module EM::FTPD
     # to the client over a data socket.
     #
     def cmd_nlst(param)
-      puts "¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥ cmd_nlst param: #{param}"
       send_unauthorised and return unless logged_in?
       send_response "150 Opening ASCII mode data connection for file list"
 
@@ -70,7 +69,6 @@ module EM::FTPD
 
     # return a detailed list of files and directories
     def cmd_list(param)
-      puts "¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥¥ cmd_list param: #{param}"
       send_unauthorised and return unless logged_in?
       send_response "150 Opening ASCII mode data connection for file list"
 

@@ -18,27 +18,25 @@ module S3FTP
     end
 
     def change_dir(path, &block)
-      puts "********************************** change_dir path: #{path}"
       prefix = scoped_path(path)
-      puts "********************************** change_dir prefix: #{prefix}"
       unless prefix.match(/(^#{@user}\/?$)|(^#{@user}\/[^\/]+\/?$)|(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/?$)/)
-        puts '********************************** change_dir: false'
+        write_log('change_dir', false)
         yield false
         return
       end
 
       item = Happening::S3::Bucket.new(@aws_bucket, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret, :prefix => prefix, :delimiter => "/")
       item.get do |response|
-        yield contains_directory?(response.response, prefix)
+        result = contains_directory?(response.response, prefix)
+        write_log('change_dir', result)
+        yield result
       end
     end
 
     def dir_contents(path, &block)
-      puts "********************************** dir_contents path: #{path}"
       prefix = scoped_path_with_trailing_slash(path)
-      puts "********************************** dir_contents prefix: #{prefix}"
       unless prefix.match(/(^#{@user}\/?$)|(^#{@user}\/[^\/]+\/?$)|(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/?$)|(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/\*\/$)/)
-        puts '********************************** dir_contents: false'
+        write_log('dir_contents', [])
         yield []
         return
       end
@@ -52,11 +50,15 @@ module S3FTP
         case prefix
         when "#{@user}/"
           dir_condition = Proc.new{|name| name.match(/(^#{@user}\/[^\/]+\/$)/)}
-          yield parse_bucket_list(response.response, Proc.new{ false }, dir_condition)
+          result = parse_bucket_list(response.response, Proc.new{ false }, dir_condition)
+          write_log('dir_contents', result)
+          yield result
         when /(^#{@user}\/[^\/]+\/?$)/
           file_condition = Proc.new{|name| name.match(/(^#{@user}\/[^\/]+\/#{PUBLISH_DATA_CSV_PATH}$)/)}
           dir_condition = Proc.new{|name| name.match(/(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/$)/)}
-          yield parse_bucket_list(response.response, file_condition, dir_condition)
+          result = parse_bucket_list(response.response, file_condition, dir_condition)
+          write_log('dir_contents', result)
+          yield result
         when /(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/?$)/
           # imageディレクトリへのアクセスなら画像リストcsvから画像ファイル一覧を取得し返す
           list = parse_bucket_list(response.response, Proc.new{ true }, Proc.new{ true })
@@ -67,9 +69,11 @@ module S3FTP
               item.name = data ? data.split(',')[0] : nil
               item
             end.select(&:name)
+            write_log('dir_contents', list)
             yield list
           end
         else
+          write_log('dir_contents', [])
           yield []
         end
       end
@@ -89,11 +93,9 @@ module S3FTP
     end
 
     def bytes(path, &block)
-      puts "********************************** bytes path: #{path}"
       key = scoped_path(path)
-      puts "********************************** bytes prefix: #{key}"
       unless key.match(/(^#{@user}\/[^\/]+\/#{PUBLISH_DATA_CSV_PATH}$)|(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/[^\/]+$)/)
-        puts '********************************** bytes: false'
+        write_log('bytes', false)
         yield false
         return
       end
@@ -111,11 +113,9 @@ module S3FTP
     end
 
     def get_file(path, &block)
-      puts "********************************** get_file path: #{path}"
       key = scoped_path(path)
-      puts "********************************** get_file prefix: #{key}"
       unless key.match(/(^#{@user}\/[^\/]+\/#{PUBLISH_DATA_CSV_PATH}$)|(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/[^\/]+$)/)
-        puts '********************************** get_file: false'
+        write_log('get_file', false)
         yield false
         return
       end
@@ -153,6 +153,11 @@ module S3FTP
     end
 
     private
+
+    def write_log(method_name, result)
+      puts "#{method_name}: #{result}, user: #{@user}"
+      # Happening::Log.debug "#{method_name}: #{result}, user: #{@user}"
+    end
 
     def extract_users(passwd)
       users  = {}
@@ -260,8 +265,15 @@ module S3FTP
     end
 
     def get_bytes(bucket, key, &block)
-      on_error   = Proc.new {|response| yield false }
-      on_success = Proc.new {|response| yield response.response_header["CONTENT_LENGTH"].to_i }
+      on_error   = Proc.new do |response|
+        write_log('bytes', false)
+        yield false
+      end
+      on_success = Proc.new do |response|
+        result = response.response_header["CONTENT_LENGTH"].to_i
+        write_log('bytes', result)
+        yield result
+      end
 
       item = Happening::S3::Item.new(bucket, key, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret)
       item.head(:retry_count => 0, :on_success => on_success, :on_error => on_error)
@@ -272,12 +284,16 @@ module S3FTP
       # em-ftpd will close it for us
       tmpfile = Tempfile.new("s3ftp")
 
-      on_error   = Proc.new {|response| yield false }
-      on_success = Proc.new {|response|
+      on_error   = Proc.new do |response|
+        write_log('get_file', false)
+        yield false
+      end
+      on_success = Proc.new do |response|
         tmpfile.flush
         tmpfile.seek(0)
+        write_log('get_file', tmpfile)
         yield tmpfile
-      }
+      end
 
       item = Happening::S3::Item.new(bucket, key, :aws_access_key_id => @aws_key, :aws_secret_access_key => @aws_secret)
       item.get(:retry_count => 1, :on_success => on_success, :on_error => on_error).stream do |chunk|
