@@ -212,7 +212,7 @@ module S3FTP
       files = doc.xpath('//Contents').select { |node|
         name  = node.xpath('./Key').first.content
         bytes = node.xpath('./Size').first.content.to_i
-        name != prefix && bytes > 0 && file_condition_proc.call(name)
+        name != prefix && bytes >= 0 && file_condition_proc.call(name)
       }.map { |node|
         name  = node.xpath('./Key').first.content
         bytes = node.xpath('./Size').first.content
