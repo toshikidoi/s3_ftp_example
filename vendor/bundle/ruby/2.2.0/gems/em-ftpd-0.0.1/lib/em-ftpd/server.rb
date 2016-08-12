@@ -14,9 +14,9 @@ module EM::FTPD
     include Directories
     include Files
 
-    COMMANDS = %w[quit type user retr stor port cdup cwd dele rmd pwd list size
-                  syst mkd pass xcup xpwd xcwd xrmd rest allo nlst pasv help
-                  noop mode rnfr rnto stru]
+    COMMANDS = %w[quit type user retr stor eprt port cdup cwd dele rmd pwd
+                  list size syst mkd pass xcup xpwd xcwd xrmd rest allo nlst
+                  pasv epsv help noop mode rnfr rnto stru feat]
 
     attr_reader :root, :name_prefix
     attr_accessor :datasocket
@@ -117,6 +117,17 @@ module EM::FTPD
       send_response "214 End of list."
     end
 
+    def cmd_feat(param)
+      str = "211- Supported features:#{LBRK}"
+      features = %w{ EPRT EPSV SIZE REST }
+      features.each do |feat|
+        str << " #{feat}" << LBRK
+      end
+      str << "211 END" << LBRK
+
+      send_response(str, true)
+    end
+
     # the original FTP spec had various options for hosts to negotiate how data
     # would be sent over the data socket, In reality these days (S)tream mode
     # is all that is used for the mode - data is just streamed down the data
@@ -141,26 +152,23 @@ module EM::FTPD
     # Passive FTP. At the clients request, listen on a port for an incoming
     # data connection. The listening socket is opened on a random port, so
     # the host and port is sent back to the client on the control socket.
+    #
     def cmd_pasv(param)
       send_unauthorised and return unless logged_in?
 
-      # close any existing data socket
-      close_datasocket
+      host, port = start_passive_socket
 
-      # grab the host/address the current connection is
-      # operating on
-      host = Socket.unpack_sockaddr_in( self.get_sockname ).last
-
-      # open a listening socket on the appropriate host
-      # and on a random port
-      @listen_sig = PassiveSocket.start(host, self)
-      port = PassiveSocket.get_port(@listen_sig)
-
-      # let the client know where to connect
-      p1 = (port / 256).to_i
-      p2 = port % 256
+      p1, p2 = *port.divmod(256)
 
       send_response "227 Entering Passive Mode (" + host.split(".").join(",") + ",#{p1},#{p2})"
+    end
+
+    # listen on a port, see RFC 2428
+    #
+    def cmd_epsv(param)
+      host, port = start_passive_socket
+
+      send_response "229 Entering Extended Passive Mode (|||#{port}|)"
     end
 
     # Active FTP. An alternative to Passive FTP. The client has a listening socket
@@ -183,6 +191,31 @@ module EM::FTPD
       send_response "200 Connection established (#{port})"
     rescue
       puts "Error opening data connection to #{host}:#{port}"
+      send_response "425 Data connection failed"
+    end
+
+    # Active FTP.
+    #
+    def cmd_eprt(param)
+      send_unauthorised and return unless logged_in?
+      send_param_required and return if param.nil?
+
+      delim = param[0,1]
+      m, af, host, port = *param.match(/#{delim}(.+?)#{delim}(.+?)#{delim}(.+?)#{delim}/)
+      port = port.to_i
+      close_datasocket
+
+      if af.to_i != 1 && ad.to_i != 2
+        send_response "522 Network protocol not supported, use (1,2)"
+      else
+        debug "connecting to client #{host} on #{port}"
+        @datasocket = FTPActiveDataSocket.open(host, port)
+
+        puts "Opened active connection at #{host}:#{port}"
+        send_response "200 Connection established (#{port})"
+      end
+    rescue
+      warn "Error opening data connection to #{host}:#{port}"
       send_response "425 Data connection failed"
     end
 
@@ -249,28 +282,48 @@ module EM::FTPD
     # ready to use, so it may take a few RTTs after the command is received at
     # the server before the data socket is ready.
     #
-    def send_outofband_data(data)
+    def send_outofband_data(data, restart_pos = 0)
       wait_for_datasocket do |datasocket|
         if datasocket.nil?
           send_response "425 Error establishing connection"
-          return
-        end
-
-        if data.is_a?(Array)
-          data = data.join(LBRK) << LBRK
-        end
-        data = StringIO.new(data) if data.kind_of?(String)
-
-        begin
-          bytes = 0
-          data.each do |line|
-            datasocket.send_data(line)
-            bytes += line.bytesize
+        else
+          if data.is_a?(Array)
+            data = data.join(LBRK) << LBRK
           end
-          send_response "226 Closing data connection, sent #{bytes} bytes"
-        ensure
-          close_datasocket
-          data.close if data.respond_to?(:close)
+          data = StringIO.new(data) if data.kind_of?(String)
+
+          data.seek(restart_pos)
+
+          if EM.reactor_running?
+            # send the data out in chunks, as fast as the client can recieve it -- not blocking the reactor in the process
+            streamer = IOStreamer.new(datasocket, data)
+            finalize = Proc.new {
+              close_datasocket
+              data.close if data.respond_to?(:close) && !data.closed?
+            }
+            streamer.callback {
+              send_response "226 Closing data connection, sent #{streamer.bytes_streamed} bytes"
+              finalize.call
+            }
+            streamer.errback { |ex|
+              send_response "425 Error while streaming data, sent #{streamer.bytes_streamed} bytes"
+              finalize.call
+              raise ex
+            }
+          else
+            # blocks until all data is sent
+            begin
+              bytes = 0
+              data.each do |line|
+                datasocket.send_data(line)
+                bytes += line.bytesize
+              end
+              send_response "226 Closing data connection, sent #{bytes} bytes"
+            ensure
+              close_datasocket
+              data.close if data.respond_to?(:close)
+            end
+          end
         end
       end
     end
@@ -300,16 +353,32 @@ module EM::FTPD
         if datasocket.nil?
           send_response "425 Error establishing connection"
           yield false
-          return
-        end
+        else
 
-        # let the client know we're ready to start
-        send_response "150 Data transfer starting"
+          # let the client know we're ready to start
+          send_response "150 Data transfer starting"
 
-        datasocket.callback do |data|
-          block.call(data)
+          datasocket.callback do |data|
+            block.call(data)
+          end
         end
       end
+    end
+
+    def start_passive_socket
+      # close any existing data socket
+      close_datasocket
+
+      # grab the host/address the current connection is
+      # operating on
+      host = Socket.unpack_sockaddr_in( self.get_sockname ).last
+
+      # open a listening socket on the appropriate host
+      # and on a random port
+      @listen_sig = PassiveSocket.start(host, self)
+      port = PassiveSocket.get_port(@listen_sig)
+
+      [host, port]
     end
 
     # all responses from an FTP server end with \r\n, so wrap the
