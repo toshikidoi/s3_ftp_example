@@ -51,15 +51,20 @@ module S3FTP
         when /(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/?$)/
           # imageディレクトリへのアクセスなら画像リストcsvから画像ファイル一覧を取得し返す
           download_publish_data_csv(prefix) do |publish_data_list|
-            list = []
-            data_list = publish_data_list.split("\n")
-            data_list.each do |data|
-              item = EM::FTPD::DirectoryItem.new({})
-              item.name = data.split(',')[0]
-              list << item
+            unless publish_data_list
+              write_log('dir_contents', [])
+              yield []
+            else
+              list = []
+              data_list = publish_data_list.split("\n")
+              data_list.each do |data|
+                item = EM::FTPD::DirectoryItem.new({})
+                item.name = data.split(',')[0]
+                list << item
+              end
+              write_log('dir_contents', list)
+              yield list
             end
-            write_log('dir_contents', list)
-            yield list
           end
         when /(^#{@user}\/?\S*$)/
           result = parse_bucket_list(response.response, Proc.new{|name| name != "#{prefix}#{PUBLISH_IMAGES_CSV_PATH}"})
@@ -97,8 +102,13 @@ module S3FTP
       if key.match(/(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/[^\/]+$)/)
         download_publish_data_csv(key) do |publish_data_list|
           list = publish_data_list.split("\n").map{|data| data.split(',')}
-          bucket, key = list.find{|data| data.first == key.split('/')[3]}[1..2]
-          get_bytes(bucket, key, &block)
+          image_info = list.find{|data| data.first == key.split('/')[3]}
+          if image_info
+           bucket, key  = image_info[1..2]
+           get_bytes(bucket, key, &block)
+          else
+            yield false
+          end
         end
         return
       end
@@ -117,8 +127,13 @@ module S3FTP
       if key.match(/(^#{@user}\/[^\/]+\/#{IMAGES_DIR_NAME}\/[^\/]+$)/)
         download_publish_data_csv(key) do |publish_data_list|
           list = publish_data_list.split("\n").map{|data| data.split(',')}
-          bucket, key = list.find{|data| data.first == key.split('/')[3]}[1..2]
-          download_file(bucket, key, &block)
+          image_info = list.find{|data| data.first == key.split('/')[3]}
+          if image_info
+            bucket, key  = image_info[1..2]
+            download_file(bucket, key, &block)
+          else
+            yield false
+          end
         end
         return
       end
