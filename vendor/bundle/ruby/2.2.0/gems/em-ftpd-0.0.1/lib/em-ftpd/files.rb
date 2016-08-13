@@ -42,6 +42,7 @@ module EM::FTPD
           send_outofband_data(data, @restart_pos || 0)
         else
           send_response "551 file not available"
+          close_datasocket
         end
       end
     end
