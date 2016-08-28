@@ -12,6 +12,7 @@ module S3FTP
     PUBLISH_DATA_CSV_PATH = 'PUBLISH_DATA.CSV'
     PUBLISH_IMAGES_CSV_PATH = 'PUBLISH_IMAGES.CSV'
     IMAGES_DIR_NAME = 'image'
+    PREFETCH_IMAGES_DIR_NAME = 'prefetch_images'
 
     def initialize(key, secret, bucket)
       @aws_key, @aws_secret, @aws_bucket = key, secret, bucket
@@ -128,9 +129,15 @@ module S3FTP
         download_publish_data_csv(key) do |publish_data_list|
           list = publish_data_list.split("\n").map{|data| data.split(',')}
           image_info = list.find{|data| data.first == key.split('/')[3]}
-          if image_info
+          if image_info # 指定されたパスが画像リストcsvにある時
             bucket, key  = image_info[1..2]
-            download_file(bucket, key, &block)
+            prefetch_image_path = "#{PREFETCH_IMAGES_DIR_NAME}/#{bucket}/#{key}"
+            if File.exist?(prefetch_image_path) # その画像がすでにプリフェッチ済みの時
+              image = File.new(prefetch_image_path)
+              yield image
+            else
+              download_file(bucket, key, &block)
+            end
           else
             yield false
           end
